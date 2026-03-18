@@ -10,9 +10,13 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     allocated_balance NUMERIC DEFAULT 0,
     referral_balance NUMERIC DEFAULT 0,
     referred_by UUID REFERENCES public.profiles(id),
+    is_admin BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Ensure is_admin column exists if table was already created
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE;
 
 -- 2. Transactions Table
 CREATE TABLE IF NOT EXISTS public.transactions (
@@ -31,18 +35,48 @@ CREATE TABLE IF NOT EXISTS public.transactions (
     approved_at TIMESTAMP WITH TIME ZONE
 );
 
+-- Ensure notes column exists
+ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS notes TEXT;
+
+-- 3. Support Messages Table
+CREATE TABLE IF NOT EXISTS public.support_messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+    text TEXT NOT NULL,
+    sender TEXT NOT NULL, -- 'user', 'admin', 'system', 'trade_log', 'system_settings_strategies'
+    status TEXT DEFAULT 'open',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Enable RLS
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.support_messages ENABLE ROW LEVEL SECURITY;
+
+-- Helper function to check if user is admin
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN AS $$
+BEGIN
+    RETURN EXISTS (
+        SELECT 1 FROM public.profiles
+        WHERE id = auth.uid() AND is_admin = TRUE
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Basic RLS Policies
-CREATE POLICY "Users can view their own profile" ON public.profiles FOR SELECT USING (auth.uid() = id);
-CREATE POLICY "Users can update their own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
-CREATE POLICY "Users can view their own transactions" ON public.transactions FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can view their own profile" ON public.profiles FOR SELECT USING (auth.uid() = id OR public.is_admin());
+CREATE POLICY "Users can update their own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id OR public.is_admin());
+CREATE POLICY "Users can view their own transactions" ON public.transactions FOR SELECT USING (auth.uid() = user_id OR public.is_admin());
 CREATE POLICY "Users can insert their own transactions" ON public.transactions FOR INSERT WITH CHECK (auth.uid() = user_id);
 
--- Admin Policies (Assuming admin email check in app, but for DB safety:)
--- You can add specific admin roles later, but for now, we rely on RPCs for admin actions.
+-- Support Messages Policies
+CREATE POLICY "Users can view their own messages" ON public.support_messages FOR SELECT USING (auth.uid() = user_id OR sender = 'system_settings_strategies' OR public.is_admin());
+CREATE POLICY "Users can insert their own messages" ON public.support_messages FOR INSERT WITH CHECK (auth.uid() = user_id OR public.is_admin());
+CREATE POLICY "Admins can update messages" ON public.support_messages FOR UPDATE USING (public.is_admin());
+
+-- Admin Policies
+-- (Already covered by OR public.is_admin() in policies above)
 
 -- 3. RPC: approve_deposit
 -- Handles deposit approval, balance update, and referral commission.

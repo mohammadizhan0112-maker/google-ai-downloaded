@@ -76,7 +76,12 @@ export default function AdminDashboard({ session }: { session: any }) {
   const [updateTarget, setUpdateTarget] = useState('all'); // 'all' or 'selected'
   
   // List of authorized admin emails
-  const ADMIN_EMAILS = ['kffatima44@gmail.com', 'mohammadizhan0112@gmail.com', 'wajiuddin65@gmail.com'];
+  const ADMIN_EMAILS = [
+    'kffatima44@gmail.com', 
+    'mohammadizhan0112@gmail.com', 
+    'wajiuddin65@gmail.com',
+    'bheemacements670@gmail.com' // Added user email
+  ];
 
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -113,11 +118,24 @@ export default function AdminDashboard({ session }: { session: any }) {
     const checkAdminStatus = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
-        if (user && user.email && ADMIN_EMAILS.includes(user.email.toLowerCase())) {
-          setIsAdmin(true);
-          fetchData();
+        if (user && user.email) {
+          const isEmailAdmin = ADMIN_EMAILS.includes(user.email.toLowerCase());
+          
+          // Also check DB for is_admin flag
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('is_admin')
+            .eq('id', user.id)
+            .single();
+            
+          if (isEmailAdmin || profile?.is_admin) {
+            setIsAdmin(true);
+            fetchData();
+          } else {
+            // Redirect non-admins to dashboard
+            navigate('/dashboard');
+          }
         } else {
-          // Redirect non-admins to dashboard
           navigate('/dashboard');
         }
       } catch (error) {
