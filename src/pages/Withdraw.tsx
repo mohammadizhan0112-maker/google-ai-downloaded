@@ -31,6 +31,35 @@ export default function Withdraw({ session }: { session: any }) {
   const [verificationLevel, setVerificationLevel] = useState(1);
   const platformFee = 2.00;
   const [networkFee, setNetworkFee] = useState(0);
+  const [conversionRates, setConversionRates] = useState<any>({
+    USDT: 1,
+    BTC: 65000,
+    ETH: 3500,
+    SOL: 150,
+    BNB: 600,
+    USDC: 1
+  });
+
+  useEffect(() => {
+    const fetchConversionRates = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('support_messages')
+          .select('text')
+          .eq('sender', 'system_settings_conversion')
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (!error && data && data.length > 0) {
+          const rates = JSON.parse(data[0].text);
+          setConversionRates((prev: any) => ({ ...prev, ...rates }));
+        }
+      } catch (err) {
+        console.error('Error fetching conversion rates:', err);
+      }
+    };
+    fetchConversionRates();
+  }, []);
 
   useEffect(() => {
     // Estimate network fee based on selected network
@@ -48,7 +77,8 @@ export default function Withdraw({ session }: { session: any }) {
   const referralWithdrawable = (profile?.referral_balance || 0) >= 100;
   const withdrawableBalance = (profile?.available_balance || 0) + (referralWithdrawable ? (profile?.referral_balance || 0) : 0);
   
-  const totalDeduction = Number(amount) > 0 ? Number(amount) + platformFee + networkFee : 0;
+  const amountInUsd = Number(amount) > 0 ? Number(amount) * (conversionRates[currency] || 1) : 0;
+  const totalDeduction = amountInUsd > 0 ? amountInUsd + platformFee + networkFee : 0;
   const canWithdraw = withdrawableBalance >= totalDeduction;
 
   useEffect(() => {
@@ -135,7 +165,7 @@ export default function Withdraw({ session }: { session: any }) {
       // Call RPC to handle withdrawal and balance deduction atomically
       const { data: rpcData, error: txError } = await supabase.rpc('request_withdrawal', {
         user_id: session.user.id,
-        amount: Number(amount),
+        amount: amountInUsd,
         strategy: 'Main Wallet',
         address: address,
         currency: currency,
@@ -343,7 +373,7 @@ export default function Withdraw({ session }: { session: any }) {
                 <h3 className="text-sm font-bold text-main uppercase tracking-wider mb-2">Withdrawal Summary</h3>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted">Amount to Withdraw</span>
-                  <span className="text-main font-medium">{amount} {currency}</span>
+                  <span className="text-main font-medium">{amount} {currency} (~${amountInUsd.toFixed(2)})</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted">Platform Fee</span>

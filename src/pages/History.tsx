@@ -14,6 +14,7 @@ interface Transaction {
   currency?: string;
   network?: string;
   address?: string;
+  fee?: number;
 }
 
 export default function History({ session }: { session: any }) {
@@ -132,6 +133,11 @@ export default function History({ session }: { session: any }) {
                   <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto">
                     <div className={`font-bold text-lg ${activity.amount > 0 ? 'text-emerald-500' : 'text-main'}`}>
                       {formatCurrency(activity.amount, true)}
+                      {activity.fee && activity.fee > 0 && (
+                        <span className="block text-[10px] text-muted font-normal mt-0.5">
+                          Fee: {formatCurrency(activity.fee, true)}
+                        </span>
+                      )}
                     </div>
                     <span className={`text-xs font-bold uppercase tracking-wider px-2 py-1 rounded-md mt-0 sm:mt-1 ${
                       activity.status === 'completed' ? 'text-emerald-500 bg-emerald-500/10' :

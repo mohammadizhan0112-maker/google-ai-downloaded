@@ -17,7 +17,9 @@ export default function Settings({ session }: { session: any }) {
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [selectedDoc, setSelectedDoc] = useState<File | null>(null);
+  const [docType, setDocType] = useState<string>('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   // Modals state
   const [verifyStep, setVerifyStep] = useState<number>(0); // 0: closed, 1: intro, 2: upload
@@ -69,35 +71,70 @@ export default function Settings({ session }: { session: any }) {
     fetchProfile();
   }, [session.user.id]);
 
-  const handlePasswordSubmit = (e: React.FormEvent) => {
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Simulate password change
-    setTimeout(() => {
+    if (newPassword !== confirmPassword) {
+      alert('Passwords do not match');
+      return;
+    }
+    
+    setIsChangingPassword(true);
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+      
+      if (error) throw error;
+      
       setIsPasswordModalOpen(false);
       setOldPassword('');
       setNewPassword('');
       setConfirmPassword('');
       alert('Password updated successfully');
-    }, 1000);
+    } catch (error: any) {
+      console.error('Error updating password:', error);
+      alert(error.message || 'Failed to update password');
+    } finally {
+      setIsChangingPassword(false);
+    }
   };
 
   const handleDocumentUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      // Instead of auto-verifying, we log it for admin approval
-      await supabase.from('support_messages').insert([{
-        user_id: session.user.id,
-        text: `DOCUMENT_UPLOAD:${selectedDoc}: User has uploaded a verification document.`,
-        sender: 'user',
-        status: 'document_pending'
-      }]);
+    if (!docType || !selectedFile) {
+      alert('Please select a document type and a file');
+      return;
+    }
 
-      await supabase.auth.updateUser({ data: { document_status: 'pending' } });
-      await supabase.from('profiles').update({ document_status: 'pending' }).eq('id', session.user.id);
-      
-      setUserMeta(prev => ({ ...prev, document_status: 'pending' }));
-      setVerifyStep(0);
-      alert('Document uploaded successfully. Verification is in progress.');
+    try {
+      // Read file as base64
+      const reader = new FileReader();
+      reader.readAsDataURL(selectedFile);
+      reader.onload = async () => {
+        const base64 = reader.result as string;
+        
+        // Log it for admin approval in the format AdminDashboard expects
+        // DOCUMENT_UPLOAD:type:filename:base64
+        const { error: msgError } = await supabase.from('support_messages').insert([{
+          user_id: session.user.id,
+          text: `DOCUMENT_UPLOAD:${docType}:${selectedFile.name}:${base64}`,
+          sender: 'user',
+          status: 'document_pending'
+        }]);
+
+        if (msgError) throw msgError;
+
+        await supabase.from('profiles').update({ document_status: 'pending' }).eq('id', session.user.id);
+        
+        setUserMeta(prev => ({ ...prev, document_status: 'pending' }));
+        setVerifyStep(0);
+        setDocType('');
+        setSelectedFile(null);
+        alert('Document uploaded successfully. Verification is in progress.');
+      };
+      reader.onerror = (error) => {
+        throw error;
+      };
     } catch (error) {
       console.error('Error uploading document:', error);
       alert('Failed to upload document');
@@ -484,34 +521,43 @@ export default function Settings({ session }: { session: any }) {
                         <label className="block text-sm font-medium text-muted mb-3">Choose Document Type</label>
                         <div className="space-y-3">
                           {['passport', 'national_id', 'driver_license'].map((type) => (
-                            <label key={type} className={`flex items-center p-4 border rounded-xl cursor-pointer transition-colors ${selectedDoc === type ? 'border-emerald-500 bg-emerald-500/10' : 'border-main bg-muted hover:bg-card'}`}>
+                            <label key={type} className={`flex items-center p-4 border rounded-xl cursor-pointer transition-colors ${docType === type ? 'border-emerald-500 bg-emerald-500/10' : 'border-main bg-muted hover:bg-card'}`}>
                               <input 
                                 type="radio" 
                                 name="docType" 
                                 value={type} 
-                                checked={selectedDoc === type}
-                                onChange={() => setSelectedDoc(type)}
+                                checked={docType === type}
+                                onChange={() => setDocType(type)}
                                 className="hidden" 
                               />
-                              <FileText className={`w-5 h-5 mr-3 ${selectedDoc === type ? 'text-emerald-500' : 'text-muted'}`} />
-                              <span className={`font-medium capitalize ${selectedDoc === type ? 'text-emerald-500' : 'text-main'}`}>
+                              <FileText className={`w-5 h-5 mr-3 ${docType === type ? 'text-emerald-500' : 'text-muted'}`} />
+                              <span className={`font-medium capitalize ${docType === type ? 'text-emerald-500' : 'text-main'}`}>
                                 {type.replace('_', ' ')}
                               </span>
-                              {selectedDoc === type && <CheckCircle2 className="w-5 h-5 ml-auto text-emerald-500" />}
+                              {docType === type && <CheckCircle2 className="w-5 h-5 ml-auto text-emerald-500" />}
                             </label>
                           ))}
                         </div>
                       </div>
 
-                      <div className="border-2 border-dashed border-main rounded-xl p-8 text-center hover:border-emerald-500/50 hover:bg-emerald-500/5 transition-colors cursor-pointer group">
+                      <div className="relative border-2 border-dashed border-main rounded-xl p-8 text-center hover:border-emerald-500/50 hover:bg-emerald-500/5 transition-colors cursor-pointer group">
+                        <input 
+                          type="file" 
+                          accept="image/*,.pdf"
+                          onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                          className="absolute inset-0 opacity-0 cursor-pointer"
+                        />
                         <Upload className="w-8 h-8 text-muted group-hover:text-emerald-500 mx-auto mb-3 transition-colors" />
-                        <p className="text-sm text-main font-medium mb-1">Click to upload or drag and drop</p>
+                        <p className="text-sm text-main font-medium mb-1">
+                          {selectedFile ? selectedFile.name : 'Click to upload or drag and drop'}
+                        </p>
                         <p className="text-xs text-muted">PNG, JPG or PDF (max. 10MB)</p>
                       </div>
 
                       <button 
                         type="submit"
-                        className="w-full bg-emerald-500 hover:bg-emerald-400 text-white font-bold py-4 px-8 rounded-xl transition-all shadow-lg flex items-center justify-center"
+                        disabled={!docType || !selectedFile}
+                        className="w-full bg-emerald-500 hover:bg-emerald-400 text-white font-bold py-4 px-8 rounded-xl transition-all shadow-lg flex items-center justify-center disabled:opacity-50"
                       >
                         <Upload className="w-5 h-5 mr-2" /> UPLOAD
                       </button>
@@ -582,9 +628,10 @@ export default function Settings({ session }: { session: any }) {
                   </div>
                   <button 
                     type="submit"
-                    className="w-full bg-emerald-500 hover:bg-emerald-400 text-white font-bold py-3 px-8 rounded-xl transition-all mt-6 shadow-lg"
+                    disabled={isChangingPassword}
+                    className="w-full bg-emerald-500 hover:bg-emerald-400 text-white font-bold py-3 px-8 rounded-xl transition-all mt-6 shadow-lg disabled:opacity-50"
                   >
-                    Update Password
+                    {isChangingPassword ? 'Updating...' : 'Update Password'}
                   </button>
                 </form>
               </div>

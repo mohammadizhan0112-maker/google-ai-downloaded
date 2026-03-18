@@ -252,12 +252,11 @@ export default function AdminDashboard({ session }: { session: any }) {
     }
   };
 
-  const handleApproveTransaction = async (id: string, type: string, amount?: number, userId?: string, strategy?: string) => {
+  const handleApproveTransaction = async (id: string, type: string, amount?: number, userId?: string, strategy?: string, notes?: string) => {
     try {
       if (type === 'deposit') {
-        const depositRate = conversionRates.depositRates?.INR || (1 / (conversionRates.INR || 0.012));
-        const defaultAmount = strategy === 'INR' ? (amount ? (amount / depositRate).toFixed(2) : '') : (amount || '');
-        const inputAmount = prompt(`Enter the confirmed deposit amount in USD:\n(Original request: ${amount} ${strategy === 'INR' ? 'INR' : 'USD'})`, defaultAmount.toString());
+        const defaultAmount = amount || '';
+        const inputAmount = prompt(`Enter the confirmed deposit amount in USD:\n(Requested: $${amount} ${notes ? `\nNotes: ${notes}` : ''})`, defaultAmount.toString());
         
         if (!inputAmount || isNaN(Number(inputAmount))) {
           alert('Invalid amount. Approval cancelled.');
@@ -993,9 +992,12 @@ export default function AdminDashboard({ session }: { session: any }) {
                           <td className="py-3 text-muted">{new Date(tx.created_at).toLocaleDateString()}</td>
                           <td className="py-3 text-main capitalize">{tx.type}</td>
                           <td className="py-3 text-main font-medium">
-                            {tx.amount} {tx.strategy === 'INR' ? 'INR' : 'USD'}
+                            ${tx.amount}
+                            {tx.notes && (
+                              <div className="text-[10px] text-muted mt-0.5">{tx.notes}</div>
+                            )}
                             {tx.type === 'withdrawal' && tx.address && (
-                              <div className="text-xs text-muted mt-1 font-mono break-all">
+                              <div className="text-xs text-muted mt-1 font-mono break-all font-normal">
                                 {tx.currency} ({tx.network}): {tx.address}
                               </div>
                             )}
@@ -1012,7 +1014,7 @@ export default function AdminDashboard({ session }: { session: any }) {
                           <td className="py-3 text-right">
                             {tx.status === 'pending' && (
                               <div className="flex items-center justify-end space-x-2">
-                                <button onClick={() => handleApproveTransaction(tx.id, tx.type, tx.amount, tx.user_id, tx.strategy)} className="p-1 text-emerald-500 hover:bg-emerald-500/10 rounded">
+                                <button onClick={() => handleApproveTransaction(tx.id, tx.type, tx.amount, tx.user_id, tx.strategy, tx.notes)} className="p-1 text-emerald-500 hover:bg-emerald-500/10 rounded">
                                   <CheckCircle2 className="w-4 h-4" />
                                 </button>
                                 <button onClick={() => handleRejectTransaction(tx.id, tx.type, tx.amount, tx.user_id)} className="p-1 text-red-500 hover:bg-red-500/10 rounded">
@@ -1140,7 +1142,10 @@ export default function AdminDashboard({ session }: { session: any }) {
                     <td className="py-4 text-main font-medium">{users.find(u => u.id === tx.user_id)?.full_name || 'Unknown'}</td>
                     <td className="py-4 text-muted">{tx.strategy || 'N/A'}</td>
                     <td className="py-4 text-main font-bold">
-                      {tx.amount} {tx.strategy === 'INR' ? 'INR' : 'USD'}
+                      ${tx.amount}
+                      {tx.notes && (
+                        <div className="text-[10px] text-muted mt-0.5 font-normal">{tx.notes}</div>
+                      )}
                       {tx.address && (
                         <div className="text-xs text-muted mt-1 font-mono break-all font-normal">
                           {tx.currency || tx.strategy} {tx.network ? `(${tx.network})` : ''}: {tx.address}
@@ -1160,7 +1165,7 @@ export default function AdminDashboard({ session }: { session: any }) {
                       {tx.status === 'pending' ? (
                         <div className="flex items-center justify-end space-x-2">
                           <button 
-                            onClick={() => handleApproveTransaction(tx.id, tx.type, tx.amount, tx.user_id, tx.strategy)} 
+                            onClick={() => handleApproveTransaction(tx.id, tx.type, tx.amount, tx.user_id, tx.strategy, tx.notes)} 
                             className="bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-black px-3 py-1 rounded-lg text-xs font-bold transition-colors"
                           >
                             Approve
@@ -1318,7 +1323,7 @@ export default function AdminDashboard({ session }: { session: any }) {
     const allocations: Record<string, number> = {};
     transactions.forEach(tx => {
       if (tx.strategy === strategyId && tx.status === 'completed') {
-        if (tx.type === 'strategy_allocation') {
+        if (tx.type === 'strategy_allocation' || tx.type === 'yield') {
           allocations[tx.user_id] = (allocations[tx.user_id] || 0) + Number(tx.amount);
         } else if (tx.type === 'strategy_withdrawal') {
           allocations[tx.user_id] = (allocations[tx.user_id] || 0) - Number(tx.amount);

@@ -236,11 +236,12 @@ export default function Deposit({ session }: { session: any }) {
         {
           user_id: session.user.id,
           type: 'deposit',
-          amount: Number(upiAmount),
+          amount: amountInUsd,
           strategy: 'INR',
           currency: 'INR',
           network: 'UPI',
           address: utrNumber,
+          notes: `Original Amount: ₹${upiAmount}`,
           status: 'pending'
         }
       ]);
