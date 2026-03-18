@@ -1,0 +1,31 @@
+[
+  {
+    "name": "strategies",
+    "description": "Trading strategies available for users to allocate funds.",
+    "type": "object",
+    "properties": {
+      "id": { "type": "string", "description": "Unique identifier (e.g., steady, momentum, alpha)" },
+      "name": { "type": "string", "description": "Display name of the strategy" },
+      "apy": { "type": "number", "description": "Annual Percentage Yield" },
+      "risk": { "type": "string", "description": "Risk level (Low, Medium, High)" },
+      "color": { "type": "string", "description": "Color theme (emerald, blue, orange)" },
+      "description": { "type": "string", "description": "Detailed description" },
+      "daily_return": { "type": "number", "description": "Current daily return percentage" },
+      "weekly_return": { "type": "number", "description": "Current weekly return percentage" },
+      "monthly_return": { "type": "number", "description": "Current monthly return percentage" }
+    },
+    "required": ["id", "name", "apy"]
+  },
+  {
+    "name": "strategy_performance",
+    "description": "Historical performance logs for strategies.",
+    "type": "object",
+    "properties": {
+      "id": { "type": "string", "format": "uuid" },
+      "strategy_id": { "type": "string", "description": "Reference to strategies.id" },
+      "date": { "type": "string", "format": "date", "description": "Date of the performance log" },
+      "return_percent": { "type": "number", "description": "Return percentage for this date" }
+    },
+    "required": ["strategy_id", "date", "return_percent"]
+  }
+]
